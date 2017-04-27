@@ -13,7 +13,7 @@ using std::vector;
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = true;
+  use_laser_ = false;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -80,6 +80,28 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
+  
+  if (!is_initialized_) {
+    x_ = VectorXd(5);
+    
+    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+      float ro = meas_package.raw_measurements_[0];
+      float phi = meas_package.raw_measurements_[1];
+      float p_x = ro * cos(phi);
+      float p_y = ro * sin(phi);
+
+      x_ << p_x, p_y, 0, 0, 0;
+    } else {
+      float x = meas_package.raw_measurements_[0];
+      float y = meas_package.raw_measurements_[1];
+      
+      x_ << x, y, 0, 0, 0;
+    }
+    
+    time_us_ = meas_package.timestamp_;
+    is_initialized_ = true;
+    return;
+  }
 }
 
 /**
@@ -311,4 +333,10 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   //update state mean and covariance matrix
   x_ = x_ + K * z_diff;
   P_ = P_ - K*S*K.transpose();
+  
+}
+
+double UKF::NIS(VectorXd z_diff, MatrixXd S) {
+  MatrixXd foo = z_diff.transpose() * S.inverse() * z_diff;
+  return 0;
 }
