@@ -23,6 +23,11 @@ UKF::UKF() {
 
   // initial covariance matrix
   P_ = MatrixXd(5, 5);
+  P_ << 1, 0, 0,    0,    0,
+		    0, 1, 0,    0,    0,
+		    0, 0, 1000, 0,    0,
+		    0, 0, 0,    1000, 0,
+        0, 0, 0,    0,    1000;
   
   // state dimension
   n_x_ = 5;
@@ -82,8 +87,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   */
   
   if (!is_initialized_) {
-    x_ = VectorXd(5);
-    
     if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
       float ro = meas_package.raw_measurements_[0];
       float phi = meas_package.raw_measurements_[1];
@@ -101,6 +104,16 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     time_us_ = meas_package.timestamp_;
     is_initialized_ = true;
     return;
+  }
+  
+  float delta_t = meas_package.timestamp_ - time_us_;
+  
+  Prediction(delta_t);
+  
+  if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
+    UpdateLidar(meas_package);
+  } else {
+    UpdateRadar(meas_package);
   }
 }
 
@@ -236,6 +249,30 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+  
+  VectorXd z = meas_package.raw_measurements_;
+  
+  MatrixXd H = MatrixXd(2, 4);
+  H << 1, 0, 0, 0,
+       0, 1, 0, 0;
+  
+  MatrixXd R = MatrixXd(2, 2);
+  R << std_laspx_, 0,
+       0, std_laspy_;
+  
+  VectorXd z_pred = H * x_;
+	VectorXd y = z - z_pred;
+	MatrixXd Ht = H.transpose();
+	MatrixXd S = H * P_ * Ht + R;
+	MatrixXd Si = S.inverse();
+	MatrixXd PHt = P_ * Ht;
+	MatrixXd K = PHt * Si;
+
+	//new estimate
+	x_ = x_ + (K * y);
+	long x_size = x_.size();
+	MatrixXd I = MatrixXd::Identity(x_size, x_size);
+	P_ = (I - K * H) * P_;
 }
 
 /**
