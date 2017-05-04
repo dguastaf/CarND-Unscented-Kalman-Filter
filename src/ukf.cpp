@@ -13,7 +13,7 @@ using std::vector;
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -25,9 +25,9 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
   P_ << 1, 0, 0,    0,    0,
 		    0, 1, 0,    0,    0,
-		    0, 0, 1000, 0,    0,
-		    0, 0, 0,    1000, 0,
-        0, 0, 0,    0,    1000;
+		    0, 0, 1, 0,    0,
+		    0, 0, 0,    1, 0,
+        0, 0, 0,    0,    1;
   
   // state dimension
   n_x_ = 5;
@@ -35,18 +35,18 @@ UKF::UKF() {
   // sigma point spreading parameter
   lambda_ = 3 - n_x_;
   
-  // Predicted sigma points
-  Xsig_pred_ = MatrixXd(n_x_, 2 * n_x_ + 1);
-  
   n_aug_ = 7;
+  
+  // Predicted sigma points
+  Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
   
   weights_ = VectorXd(2 * n_aug_ + 1);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 30;
+  std_a_ = 2;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 30;
+  std_yawdd_ = .7;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -106,7 +106,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     return;
   }
   
-  float delta_t = meas_package.timestamp_ - time_us_;
+  if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+    return;
+  }
+  
+  float delta_t = (meas_package.timestamp_ - time_us_) / 1000000;
   
   Prediction(delta_t);
   
@@ -115,6 +119,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   } else {
     UpdateRadar(meas_package);
   }
+  
+  time_us_ = meas_package.timestamp_;
 }
 
 /**
@@ -134,12 +140,13 @@ void UKF::Prediction(double delta_t) {
   
   MatrixXd A = P_.llt().matrixL();
   
-  Xsig_pred_.col(0) = x_;
-  for (int i = 0; i < n_x_; i++)
-  {
-    Xsig_pred_.col(i+1) = x_ + sqrt(lambda_ + n_x_) * A.col(i);
-    Xsig_pred_.col(i+1 + n_x_) = x_ - sqrt(lambda_ + n_x_) * A.col(i);
-  }
+//  Xsig_pred_.col(0) = x_;
+//  
+//  for (int i = 0; i < n_x_; i++)
+//  {
+//    Xsig_pred_.col(i+1) = x_ + sqrt(lambda_ + n_x_) * A.col(i);
+//    Xsig_pred_.col(i+1 + n_x_) = x_ - sqrt(lambda_ + n_x_) * A.col(i);
+//  }
   
   // augment state 
   VectorXd x_aug = VectorXd(n_aug_);
@@ -164,9 +171,6 @@ void UKF::Prediction(double delta_t) {
     Xsig_aug.col(i+1) = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
     Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
   }
-  
-  // Sigma point prediction
-  MatrixXd Xsig_pred = MatrixXd(n_x_, 2 * n_aug_ + 1);
   
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {
     double p_x = Xsig_aug(0, i);
@@ -199,11 +203,11 @@ void UKF::Prediction(double delta_t) {
     yaw_p = yaw_p + 0.5*nu_yawdd*delta_t*delta_t;
     yawd_p = yawd_p + nu_yawdd*delta_t;
     
-    Xsig_pred(0,i) = px_p;
-    Xsig_pred(1,i) = py_p;
-    Xsig_pred(2,i) = v_p;
-    Xsig_pred(3,i) = yaw_p;
-    Xsig_pred(4,i) = yawd_p;
+    Xsig_pred_(0,i) = px_p;
+    Xsig_pred_(1,i) = py_p;
+    Xsig_pred_(2,i) = v_p;
+    Xsig_pred_(3,i) = yaw_p;
+    Xsig_pred_(4,i) = yawd_p;
   }
   
    
@@ -218,7 +222,7 @@ void UKF::Prediction(double delta_t) {
   
   x_.fill(0.0);
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //iterate over sigma points
-    x_ = x_ + weights_(i) * Xsig_pred.col(i);
+    x_ = x_ + weights_(i) * Xsig_pred_.col(i);
   }
 
   //predicted state covariance matrix
@@ -226,9 +230,10 @@ void UKF::Prediction(double delta_t) {
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //iterate over sigma points
 
     // state difference
-    VectorXd x_diff = Xsig_pred.col(i) - x_;
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
     
     //angle normalization
+    
     while (x_diff(3)> M_PI) x_diff(3) -= 2. * M_PI;
     while (x_diff(3)<-M_PI) x_diff(3) += 2. * M_PI;
 
@@ -252,9 +257,9 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   
   VectorXd z = meas_package.raw_measurements_;
   
-  MatrixXd H = MatrixXd(2, 4);
-  H << 1, 0, 0, 0,
-       0, 1, 0, 0;
+  MatrixXd H = MatrixXd(2, 5);
+  H << 1, 0, 0, 0, 0,
+       0, 1, 0, 0, 0;
   
   MatrixXd R = MatrixXd(2, 2);
   R << std_laspx_, 0,
