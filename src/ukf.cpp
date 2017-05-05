@@ -24,9 +24,9 @@ UKF::UKF() {
   // initial covariance matrix
   P_ = MatrixXd(5, 5);
   P_ << 1, 0, 0, 0,  0,
-		    0, 1, 0, 0,  0,
-		    0, 0, 1, 0,  0,
-		    0, 0, 0, 10, 0,
+        0, 1, 0, 0,  0,
+        0, 0, 1, 0,  0,
+        0, 0, 0, 10, 0,
         0, 0, 0, 0,  10;
   
   // state dimension
@@ -173,8 +173,7 @@ void UKF::Prediction(double delta_t) {
     Xsig_pred_(3,i) = yaw_p;
     Xsig_pred_(4,i) = yawd_p;
   }
-  
-   
+
   // Predict mean and covariance
     
   double weight_0 = lambda_ / (lambda_ + n_aug_);
@@ -222,12 +221,12 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
        0, std_laspy_;
   
   VectorXd z_pred = H * x_;
-	VectorXd y = z - z_pred;
-	MatrixXd Ht = H.transpose();
-	MatrixXd S = H * P_ * Ht + R;
-	MatrixXd Si = S.inverse();
-	MatrixXd PHt = P_ * Ht;
-	MatrixXd K = PHt * Si;
+  VectorXd y = z - z_pred;
+  MatrixXd Ht = H.transpose();
+  MatrixXd S = H * P_ * Ht + R;
+  MatrixXd Si = S.inverse();
+  MatrixXd PHt = P_ * Ht;
+  MatrixXd K = PHt * Si;
 
 	//new estimate
 	x_ = x_ + (K * y);
